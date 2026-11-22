@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>축의대 장부</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&family=Gowun+Batang:wght@700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* 휴대폰 한 손 입력용: 위 합계 띠 → 입력 카드 → 접수 목록 → 금액별 집계 */
+:root{
+  --bg:#f4f4f7; --card:#ffffff; --ink:#1c2230; --muted:#677084; --line:#e1e3ea;
+  --accent:#8a2f52; --accent-ink:#ffffff; --accent-soft:#f6e8ee;
+  --ok:#1f7a4d; --warn:#b4570b; --bad:#b3261e;
+  --f-body:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif;
+  --f-title:"Gowun Batang","Noto Serif KR",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14161c; --card:#1e2129; --ink:#eceef3; --muted:#9aa2b3; --line:#2f333e;
+  --accent:#e07ba3; --accent-ink:#1a0d13; --accent-soft:#3a2230;
+  --ok:#5fcf95; --warn:#f0a35a; --bad:#ff8a80; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#14161c; --card:#1e2129; --ink:#eceef3; --muted:#9aa2b3; --line:#2f333e;
+  --accent:#e07ba3; --accent-ink:#1a0d13; --accent-soft:#3a2230;
+  --ok:#5fcf95; --warn:#f0a35a; --bad:#ff8a80; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 8px;display:flex;flex-direction:column;gap:10px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-family:var(--f-title);font-size:1.45rem;margin:0;letter-spacing:.02em}
+.sync{font-size:.78rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.sync.ok{color:var(--ok);border-color:currentColor}
+.sync.warn{color:var(--warn);border-color:currentColor}
+.sync.bad{color:var(--bad);border-color:currentColor}
+.sum{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}
+.tile .k{font-size:.72rem;color:var(--muted);letter-spacing:.04em}
+.tile .v{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.main .v{color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card.editing{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.edit-tag{display:none;font-size:.8rem;font-weight:700;color:var(--accent)}
+.card.editing .edit-tag{display:block}
+.row{display:grid;grid-template-columns:88px 1fr;gap:10px}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;font-weight:500}
+input[type=text],input[type=search]{width:100%;font:inherit;font-size:1.15rem;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#f-no{text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.amt-wrap{position:relative}
+#f-amt{font-size:1.6rem;font-weight:800;padding-right:64px;font-variant-numeric:tabular-nums}
+.unit{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)}
+.preview{font-size:.95rem;margin-top:6px;font-variant-numeric:tabular-nums;min-height:1.4em}
+.preview b{color:var(--accent)}
+.hint{font-size:.78rem;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font:inherit;font-size:.95rem;font-weight:700;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:52px;height:52px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:1.6rem;font-weight:700;cursor:pointer}
+.stepper .n{min-width:56px;text-align:center;font-size:1.7rem;font-weight:800;font-variant-numeric:tabular-nums}
+.stepper .u{color:var(--muted);font-weight:700}
+.warnline{font-size:.85rem;color:var(--warn);font-weight:700}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{font:inherit;font-weight:800;font-size:1.1rem;border-radius:12px;padding:15px 16px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;flex:1}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);flex:2}
+.btn.danger{color:var(--bad);border-color:currentColor}
+.btn.sm{font-size:.95rem;padding:11px 12px}
+.toast{font-size:.9rem;color:var(--ok);font-weight:700;min-height:1.3em}
+h2{font-size:1rem;margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
+.list{display:flex;flex-direction:column}
+.item{display:grid;grid-template-columns:44px 1fr auto auto;gap:10px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer;background:none;border-left:0;border-right:0;border-top:0;font:inherit;color:inherit;text-align:left;width:100%}
+.item:last-child{border-bottom:0}
+.item .no{font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+.item .nm{min-width:0}
+.item .nm div{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .nm span{font-size:.78rem;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .am{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
+.item .tk{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;min-width:40px;text-align:right}
+.item.pend .no::after{content:"•";color:var(--warn);margin-left:2px}
+.empty{color:var(--muted);text-align:center;padding:22px 8px;font-size:.95rem}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right}
+th{font-size:.78rem;color:var(--muted);font-weight:500}
+td:first-child,th:first-child{text-align:left}
+tfoot td{font-weight:800;border-bottom:0}
+.note{font-size:.8rem;color:var(--muted)}
+.banner{font-size:.85rem;border-radius:10px;padding:10px 12px;background:var(--accent-soft);color:var(--ink)}
+@media (max-width:400px){.sum{grid-template-columns:.8fr 1.5fr .8fr;gap:6px}.tile{padding:7px 8px}.tile .v{font-size:1.02rem}}
+input::placeholder{color:var(--muted);opacity:.55;font-weight:500}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.tk-wrap{position:relative;max-width:160px}
+#f-tk{font-size:1.6rem;font-weight:800;text-align:center;padding-right:44px;font-variant-numeric:tabular-nums}
+</style>
+</head><body>
+
+<div class="wrap">
+<header>
+  <div class="top">
+    <h1>축의대 장부</h1>
+    <span id="sync" class="sync">연결 중…</span>
+  </div>
+  <div class="sum">
+    <div class="tile"><div class="k">접수</div><div class="v" id="s-cnt">0건</div></div>
+    <div class="tile main"><div class="k">총액</div><div class="v" id="s-sum">0원</div></div>
+    <div class="tile"><div class="k">식권</div><div class="v" id="s-tk">0장</div></div>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<form id="form" class="card" autocomplete="off" novalidate>
+  <div class="edit-tag" id="edit-tag">수정 중</div>
+  <div class="row">
+    <div><label for="f-no">번호</label><input id="f-no" type="text" inputmode="numeric"></div>
+    <div><label for="f-name">이름</label><input id="f-name" type="text" placeholder="홍길동" enterkeyhint="next"></div>
+  </div>
+  <div>
+    <label for="f-amt">금액 <span class="hint">(만원 단위로 입력 · 10 → 100,000원)</span></label>
+    <div class="amt-wrap"><input id="f-amt" type="text" inputmode="decimal" placeholder="10" enterkeyhint="next"><span class="unit">만원</span></div>
+    <div class="preview" id="amt-preview"></div>
+    <div class="chips" id="amt-chips"></div>
+  </div>
+  <div>
+    <label for="f-tk">식권 <span class="hint">(숫자 입력 · 엔터 누르면 저장)</span></label>
+    <div class="amt-wrap tk-wrap"><input id="f-tk" type="text" inputmode="numeric" placeholder="1" enterkeyhint="done"><span class="unit">장</span></div>
+  </div>
+  <div><label for="f-memo">메모 <span class="hint">(선택 · 신랑측/신부측, 관계)</span></label><input id="f-memo" type="text" placeholder="신랑 회사 동료" enterkeyhint="done"></div>
+  <div class="warnline" id="warn"></div>
+  <div class="btns" id="btns-new">
+    <button type="submit" class="btn primary" id="b-save">저장</button>
+  </div>
+  <div class="btns" id="btns-edit" hidden>
+    <button type="button" class="btn" id="b-cancel">취소</button>
+    <button type="button" class="btn danger" id="b-del">삭제</button>
+    <button type="submit" class="btn primary">수정 저장</button>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+</form>
+
+<section class="card">
+  <h2>접수 목록 <small>눌러서 수정</small></h2>
+  <input id="q" type="search" placeholder="이름·번호 찾기">
+  <div class="list" id="list"></div>
+</section>
+
+<section class="card">
+  <h2>금액별 집계</h2>
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>금액</th><th>건수</th><th>소계</th></tr></thead>
+    <tbody id="by-amt"></tbody>
+    <tfoot><tr><td>합계</td><td id="t-cnt">0</td><td id="t-sum">0</td></tr></tfoot>
+  </table></div>
+  <div class="btns">
+    <button type="button" class="btn primary" id="b-xlsx">엑셀로 받기</button>
+    <button type="button" class="btn sm" id="b-copy">표 복사</button>
+  </div>
+  <div class="toast" id="toast2" role="status"></div>
+  <div class="note">엑셀에는 명단(번호·이름·금액·식권·메모·접수 시각)과 합계 시트가 들어갑니다. ‘표 복사’는 엑셀에 바로 붙여넣을 수 있는 형태로 복사합니다.</div>
+</section>
+</div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const LS_CACHE='gift.cache.v1', LS_PEND='gift.pending.v1';
+const AMT_CHIPS=[3,5,7,10,15,20,30,50];
+
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+let remote=new Map(Object.entries(lsGet(LS_CACHE,{})));
+let pending=new Map(Object.entries(lsGet(LS_PEND,{}))); // id -> {op,data,seq}
+let gotSnap=false, flushing=false, seq=Date.now();
+let editId=null, tickets=1, delArmed=false;
+
+const won=n=>(Number(n)||0).toLocaleString('ko-KR')+'원';
+function korean(n){n=Math.round(n);if(!n)return '0원';const man=Math.floor(n/10000),rest=n%10000;let s='';if(man)s+=man.toLocaleString('ko-KR')+'만';if(rest){const ch=Math.floor(rest/1000),r=rest%1000;if(ch)s+=(s?' ':'')+ch+'천';if(r)s+=(s?' ':'')+r;}return s+'원';}
+function parseAmt(s){s=String(s||'').replace(/[,\s원]/g,'').replace(/만$/,'');if(s==='')return null;const n=parseFloat(s);if(!isFinite(n)||n<0)return null;return n<1000?Math.round(n*10000):Math.round(n);}
+function newId(){return 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function hhmm(t){try{const d=new Date(t);return d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Seoul'})}catch(e){return ''}}
+
+function records(){
+  const m=new Map(remote);
+  for(const [id,p] of pending){ if(p.op==='delete') m.delete(id); else m.set(id,p.data); }
+  return [...m.entries()].map(([id,d])=>({id,...d,_pend:pending.has(id)}));
+}
+function nextNo(){let mx=0;for(const r of records()){const n=parseInt(r.no,10);if(n>mx)mx=n;}return mx+1;}
+
+/* ---------- 저장 (Supabase · 주소 #k= 열쇠가 있는 장부만 읽고 씀) ---------- */
+const SB='https://isusogwxthvmdpowerrr.supabase.co/rest/v1/rpc/';
+const SBKEY='sb_publishable_DQqqpLkR1ukvix09KIwpNA_3qajlEe-';
+function getBook(){const m=(location.hash||'').match(/k=([\w-]+)/);if(m){lsSet('gift.book',m[1]);return m[1];}return lsGet('gift.book',null);}
+const BOOK=getBook();
+let online=!!BOOK, writes=0, failCount=0;
+async function rpc(fn,body){
+  const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),9000);
+  try{
+    const r=await fetch(SB+fn,{method:'POST',headers:{'apikey':SBKEY,'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal,cache:'no-store'});
+    const t=await r.text(); if(!r.ok){const e=new Error(t);e.status=r.status;try{e.msg=JSON.parse(t).message}catch(_){ }throw e;}
+    return t?JSON.parse(t):null;
+  } finally { clearTimeout(to); }
+}
+function setSync(){
+  const el=$('sync'); const n=pending.size;
+  el.className='sync';
+  if(!online){ el.textContent=n?`이 기기에만 저장 · ${n}건`:'이 기기에만 저장'; el.classList.add('warn'); return; }
+  if(n){ el.textContent=`저장 대기 ${n}건`; el.classList.add('warn'); return; }
+  if(failCount>=2){ el.textContent='연결 느림 · 입력은 계속 됨'; el.classList.add('warn'); return; }
+  if(!gotSnap){ el.textContent='연결 중…'; return; }
+  el.textContent='저장됨'; el.classList.add('ok');
+}
+function queue(id,op,data){ pending.set(id,{op,data,seq:++seq}); lsSet(LS_PEND,Object.fromEntries(pending)); render(); flush(); }
+async function flush(){
+  if(!online||flushing||!pending.size)return; flushing=true;
+  try{
+    for(const [id,p] of [...pending]){
+      try{
+        if(p.op==='delete') await rpc('wg_del',{p_book:BOOK,p_id:id}); else await rpc('wg_set',{p_book:BOOK,p_id:id,p_data:p.data});
+        writes++; failCount=0;
+        const cur=pending.get(id); if(cur&&cur.seq===p.seq) pending.delete(id);
+        if(p.op==='delete') remote.delete(id); else remote.set(id,p.data);
+        lsSet(LS_PEND,Object.fromEntries(pending)); lsSet(LS_CACHE,Object.fromEntries(remote));
+      }catch(e){ failCount++; if(e.msg==='no_book') badBook(); break; }
+    }
+  } finally { flushing=false; render(); }
+}
+let pulling=false;
+async function pull(){
+  if(!online||pulling)return; pulling=true; const w=writes;
+  try{
+    const arr=await rpc('wg_list',{p_book:BOOK}); failCount=0;
+    if(w===writes && !flushing){
+      const m=new Map(); for(const o of arr||[]){const {id,...d}=o; m.set(id,d);}
+      remote=m; lsSet(LS_CACHE,Object.fromEntries(remote)); gotSnap=true;
+    }
+  }catch(e){ failCount++; if(e.msg==='no_book') badBook(); }
+  finally{ pulling=false; render(); if(pending.size) flush(); }
+}
+function badBook(){ online=false; showBanner('장부 주소가 맞지 않습니다. 처음 받은 링크(#k=… 포함)로 다시 열어 주세요. 그동안 입력은 이 휴대폰에 저장됩니다.'); }
+setInterval(()=>{ if(document.visibilityState==='visible') pull(); },4000);
+setInterval(flush,8000);
+window.addEventListener('online',()=>{flush();pull();});
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){flush();pull();} });
+function showBanner(t){const b=$('banner');b.textContent=t;b.hidden=false;}
+if(!BOOK) showBanner('장부 열쇠가 없는 주소입니다. 처음 받은 링크(#k=… 포함)로 열어야 다른 휴대폰과 함께 저장됩니다. 지금은 이 휴대폰에만 저장돼요.');
+else pull();
+
+/* ---------- 입력 ---------- */
+function setTickets(n){tickets=Math.max(0,Math.min(99,n));$('f-tk').value=tickets;}
+function readTickets(){const v=String($('f-tk').value||'').replace(/[^0-9]/g,'');return v===''?1:Math.min(99,parseInt(v,10));}
+function updPreview(){
+  const a=parseAmt($('f-amt').value);
+  $('amt-preview').innerHTML = a===null? '' : `= <b>${won(a)}</b> <span class="hint">(${korean(a)})</span>`;
+  for(const b of $('amt-chips').children) b.classList.toggle('on',a!==null&&+b.dataset.v*10000===a);
+  checkWarn();
+}
+function checkWarn(){
+  const no=$('f-no').value.trim(); let w='';
+  if(no && records().some(r=>String(r.no)===no && r.id!==editId)) w=`${no}번은 이미 있습니다. 번호를 확인해 주세요.`;
+  const a=parseAmt($('f-amt').value);
+  if(a!==null && a>0 && a<10000) w=w||'1만원보다 적은 금액입니다. 맞는지 확인해 주세요.';
+  $('warn').textContent=w;
+}
+for(const v of AMT_CHIPS){const b=document.createElement('button');b.type='button';b.className='chip';b.dataset.v=v;b.textContent=v+'만';b.onclick=()=>{$('f-amt').value=v;updPreview();};$('amt-chips').appendChild(b);}
+$('f-amt').addEventListener('input',updPreview);
+$('f-no').addEventListener('input',checkWarn);
+$('f-tk').addEventListener('input',()=>{const el=$('f-tk');const v=el.value.replace(/[^0-9]/g,'').slice(0,2);if(v!==el.value)el.value=v;});
+
+/* 엔터로 다음 칸: 번호 → 이름 → 금액 → 식권 → 저장.
+   한글 입력 중(조합 중)에 엔터를 누르면 마지막 글자가 다음 칸으로 넘어가던 오류 →
+   조합이 끝나 글자가 지금 칸에 들어간 뒤에 칸을 옮긴다. */
+const ORDER=['f-no','f-name','f-amt','f-tk'];
+let composing=false, lastMove=0, moveAfterCompose=null;
+function focusField(id){const el=$(id);el.focus();try{el.select()}catch(_){}}
+function advance(fromId){
+  lastMove=Date.now();
+  const i=ORDER.indexOf(fromId);
+  if(fromId==='f-tk'||fromId==='f-memo'||i<0){ const c=$(fromId); if(c&&c.blur) c.blur(); setTimeout(save,30); return; }
+  const cur=$(fromId); if(cur&&cur.blur) cur.blur();   // 남은 조합 글자를 지금 칸에 확정
+  setTimeout(()=>focusField(ORDER[i+1]),30);
+}
+for(const id of [...ORDER,'f-memo']){
+  const el=$(id);
+  el.addEventListener('compositionstart',()=>{composing=true;});
+  el.addEventListener('compositionend',()=>{composing=false; if(moveAfterCompose===id){moveAfterCompose=null; setTimeout(()=>advance(id),0);} });
+  el.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.keyCode!==13)return;
+    e.preventDefault();
+    if(e.isComposing||composing){ moveAfterCompose=id; return; }  // 조합 끝나면 이동
+    if(Date.now()-lastMove<250)return;
+    advance(id);
+  });
+}
+
+function toast(id,t,bad){const el=$(id);el.style.color=bad?'var(--bad)':'var(--ok)';el.textContent=t;clearTimeout(el._t);el._t=setTimeout(()=>el.textContent='',3500);}
+
+function resetForm(){
+  editId=null;moveAfterCompose=null;delArmed=false;$('b-del').textContent='삭제';
+  $('form').classList.remove('editing');$('btns-new').hidden=false;$('btns-edit').hidden=true;
+  $('f-no').value=nextNo();$('f-name').value='';$('f-amt').value='';$('f-memo').value='';setTickets(1);updPreview();
+}
+$('form').addEventListener('submit',e=>{
+  e.preventDefault();
+  // 휴대폰 키보드의 '이동/완료' 버튼이 바로 저장으로 이어지는 경우 → 빈 칸이면 다음 칸으로 보냄
+  const a=document.activeElement&&document.activeElement.id;
+  if(e.submitter==null && (a==='f-no'||a==='f-name'||a==='f-amt')){ if(Date.now()-lastMove>=250) advance(a); return; }
+  save();
+});
+function save(){
+  tickets=readTickets();
+  const no=parseInt($('f-no').value,10);
+  const name=$('f-name').value.trim();
+  const amt=parseAmt($('f-amt').value);
+  if(!no||no<1){toast('toast','번호를 숫자로 넣어 주세요.',true);$('f-no').focus();return;}
+  if(amt===null){toast('toast','금액을 넣어 주세요. (식권만이면 0)',true);$('f-amt').focus();return;}
+  const id=editId||newId();
+  const prev=editId? records().find(r=>r.id===editId):null;
+  const data={no,name,amount:amt,tickets,memo:$('f-memo').value.trim(),at:prev&&prev.at?prev.at:Date.now()};
+  queue(id,'set',data);
+  toast('toast',`${editId?'수정함':'저장함'} · ${no}번 ${name||'(이름 없음)'} ${won(amt)} · 식권 ${tickets}장`);
+  resetForm(); setTimeout(()=>focusField('f-name'),30);
+}
+$('b-cancel').onclick=()=>{resetForm();};
+$('b-del').onclick=()=>{
+  if(!editId)return;
+  if(!delArmed){delArmed=true;$('b-del').textContent='한 번 더 누르면 삭제';return;}
+  const r=records().find(x=>x.id===editId);
+  queue(editId,'delete',null);
+  toast('toast',`삭제함 · ${r?r.no+'번 '+(r.name||''):''}`);
+  resetForm();
+};
+function startEdit(id){
+  const r=records().find(x=>x.id===id); if(!r)return;
+  editId=id;delArmed=false;$('b-del').textContent='삭제';
+  $('f-no').value=r.no;$('f-name').value=r.name||'';$('f-amt').value=r.amount>=10000&&r.amount%1000===0?r.amount/10000:r.amount;$('f-memo').value=r.memo||'';setTickets(r.tickets||0);
+  $('form').classList.add('editing');$('btns-new').hidden=true;$('btns-edit').hidden=false;$('edit-tag').textContent=`수정 중 · ${r.no}번`;
+  updPreview(); $('form').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ---------- 화면 ---------- */
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function sorted(){return records().sort((a,b)=>(a.no-b.no)||((a.at||0)-(b.at||0)));}
+function totals(rs){return rs.reduce((t,r)=>{t.cnt++;t.sum+=Number(r.amount)||0;t.tk+=Number(r.tickets)||0;return t;},{cnt:0,sum:0,tk:0});}
+function render(){
+  const rs=sorted(); const t=totals(rs);
+  $('s-cnt').textContent=t.cnt+'건'; $('s-sum').textContent=won(t.sum); $('s-tk').textContent=t.tk+'장';
+  const q=$('q').value.trim();
+  const shown=rs.filter(r=>!q||String(r.no)===q||(r.name||'').includes(q)||(r.memo||'').includes(q)).reverse();
+  $('list').innerHTML = shown.length? shown.map(r=>`<button type="button" class="item${r._pend?' pend':''}" data-id="${esc(r.id)}">
+      <span class="no">${esc(r.no)}</span>
+      <span class="nm"><div>${esc(r.name||'(이름 없음)')}</div><span>${esc([r.memo,hhmm(r.at)].filter(Boolean).join(' · '))}</span></span>
+      <span class="am">${won(r.amount)}</span><span class="tk">식권 ${esc(r.tickets||0)}</span></button>`).join('')
+    : `<div class="empty">${rs.length?'찾는 사람이 없습니다.':'아직 접수가 없습니다. 위에서 이름과 금액을 넣고 저장하세요.'}</div>`;
+  const by=new Map(); for(const r of rs){const k=Number(r.amount)||0;const v=by.get(k)||{c:0,s:0};v.c++;v.s+=k;by.set(k,v);}
+  $('by-amt').innerHTML=[...by.entries()].sort((a,b)=>b[0]-a[0]).map(([k,v])=>`<tr><td>${won(k)}</td><td>${v.c}건</td><td>${won(v.s)}</td></tr>`).join('')||'<tr><td colspan="3" class="note" style="text-align:center">접수가 쌓이면 금액별로 묶어 보여 줍니다.</td></tr>';
+  $('t-cnt').textContent=t.cnt+'건'; $('t-sum').textContent=won(t.sum);
+  if(!editId && document.activeElement!==$('f-no')){ const cur=parseInt($('f-no').value,10); if(!cur||records().some(r=>r.no===cur)) $('f-no').value=nextNo(); }
+  setSync();
+}
+$('list').addEventListener('click',e=>{const b=e.target.closest('.item');if(b)startEdit(b.dataset.id);});
+$('q').addEventListener('input',render);
+
+/* ---------- 엑셀 ---------- */
+function today(){try{return new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'})}catch(e){return new Date().toISOString().slice(0,10)}}
+function rowsAoa(){
+  const rs=sorted(); const t=totals(rs);
+  const head=['번호','이름','금액(원)','식권(장)','메모','접수 시각'];
+  const body=rs.map(r=>[r.no,r.name||'',Number(r.amount)||0,Number(r.tickets)||0,r.memo||'',hhmm(r.at)]);
+  return {rs,t,head,body};
+}
+$('b-xlsx').onclick=()=>{
+  const {rs,t,head,body}=rowsAoa();
+  if(!rs.length){toast('toast2','아직 접수가 없습니다.',true);return;}
+  if(typeof XLSX==='undefined'){toast('toast2','엑셀 도구를 불러오지 못했습니다. ‘표 복사’를 써 주세요.',true);return;}
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([head,...body,[],['합계','',t.sum,t.tk,`${t.cnt}건`,'']]);
+  ws['!cols']=[{wch:6},{wch:12},{wch:12},{wch:8},{wch:22},{wch:10}];
+  const last=body.length+3;
+  for(let r=2;r<=last;r++){const c=ws['C'+r]; if(c&&typeof c.v==='number') c.z='#,##0';}
+  XLSX.utils.book_append_sheet(wb,ws,'명단');
+  const by=new Map(); for(const r of rs){const k=Number(r.amount)||0;const v=by.get(k)||{c:0,s:0};v.c++;v.s+=k;by.set(k,v);}
+  const s2=[['항목','값'],['접수 건수',t.cnt],['총액(원)',t.sum],['식권 총 장수',t.tk],[],['금액(원)','건수','소계(원)'],
+    ...[...by.entries()].sort((a,b)=>b[0]-a[0]).map(([k,v])=>[k,v.c,v.s])];
+  const ws2=XLSX.utils.aoa_to_sheet(s2); ws2['!cols']=[{wch:14},{wch:12},{wch:14}];
+  for(const ref of Object.keys(ws2)){const c=ws2[ref]; if(ref[0]!=='!'&&c&&typeof c.v==='number'&&c.v>=1000) c.z='#,##0';}
+  XLSX.utils.book_append_sheet(wb,ws2,'합계');
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  try{
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=`축의금_장부_${today()}.xlsx`; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},4000);
+    toast('toast2','엑셀 파일을 받았습니다. (다운로드 폴더 확인)');
+  }catch(e){ toast('toast2','파일 받기가 안 됩니다. ‘표 복사’를 써 주세요.', true); }
+};
+$('b-copy').onclick=()=>{
+  const {rs,t,head,body}=rowsAoa();
+  if(!rs.length){toast('toast2','아직 접수가 없습니다.',true);return;}
+  const tsv=[head,...body,['합계','',t.sum,t.tk,t.cnt+'건','']].map(r=>r.join('\t')).join('\n');
+  const done=()=>toast('toast2',`${rs.length}건 복사함 · 엑셀에 붙여넣기 하세요.`);
+  const fallback=()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();ok?done():toast('toast2','복사가 막혔습니다. 엑셀로 받기를 써 주세요.',true);};
+  try{ navigator.clipboard.writeText(tsv).then(done,fallback); }catch(e){ fallback(); }
+};
+
+resetForm(); render();
+})();
+</script>
+</body></html>
