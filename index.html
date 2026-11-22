@@ -94,6 +94,7 @@ tfoot td{font-weight:800;border-bottom:0}
 @media (max-width:400px){.sum{grid-template-columns:.8fr 1.5fr .8fr;gap:6px}.tile{padding:7px 8px}.tile .v{font-size:1.02rem}}
 input::placeholder{color:var(--muted);opacity:.55;font-weight:500}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+[hidden]{display:none!important}
 .tk-wrap{position:relative;max-width:160px}
 #f-tk{font-size:1.6rem;font-weight:800;text-align:center;padding-right:44px;font-variant-numeric:tabular-nums}
 </style>
@@ -276,7 +277,7 @@ $('f-tk').addEventListener('input',()=>{const el=$('f-tk');const v=el.value.repl
    한글 입력 중(조합 중)에 엔터를 누르면 마지막 글자가 다음 칸으로 넘어가던 오류 →
    조합이 끝나 글자가 지금 칸에 들어간 뒤에 칸을 옮긴다. */
 const ORDER=['f-no','f-name','f-amt','f-tk'];
-let composing=false, lastMove=0, moveAfterCompose=null;
+let lastMove=0, moveAfterCompose=null;
 function focusField(id){const el=$(id);el.focus();try{el.select()}catch(_){}}
 function advance(fromId){
   lastMove=Date.now();
@@ -287,12 +288,15 @@ function advance(fromId){
 }
 for(const id of [...ORDER,'f-memo']){
   const el=$(id);
-  el.addEventListener('compositionstart',()=>{composing=true;});
-  el.addEventListener('compositionend',()=>{composing=false; if(moveAfterCompose===id){moveAfterCompose=null; setTimeout(()=>advance(id),0);} });
+  el.addEventListener('compositionend',()=>{ if(moveAfterCompose===id){moveAfterCompose=null; setTimeout(()=>advance(id),0);} });
   el.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.keyCode!==13)return;
     e.preventDefault();
-    if(e.isComposing||composing){ moveAfterCompose=id; return; }  // 조합 끝나면 이동
+    if(e.isComposing||e.keyCode===229){            // 한글 조합 중 → 조합 끝난 뒤 이동
+      moveAfterCompose=id;
+      setTimeout(()=>{ if(moveAfterCompose===id){ moveAfterCompose=null; advance(id); } },200);
+      return;
+    }
     if(e.repeat)return;
     advance(id);
   });
