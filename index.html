@@ -282,9 +282,8 @@ function focusField(id){const el=$(id);el.focus();try{el.select()}catch(_){}}
 function advance(fromId){
   lastMove=Date.now();
   const i=ORDER.indexOf(fromId);
-  if(fromId==='f-tk'||fromId==='f-memo'||i<0){ const c=$(fromId); if(c&&c.blur) c.blur(); setTimeout(save,30); return; }
-  const cur=$(fromId); if(cur&&cur.blur) cur.blur();   // 남은 조합 글자를 지금 칸에 확정
-  setTimeout(()=>focusField(ORDER[i+1]),30);
+  if(fromId==='f-tk'||fromId==='f-memo'||i<0){ save(); return; }
+  focusField(ORDER[i+1]);
 }
 for(const id of [...ORDER,'f-memo']){
   const el=$(id);
@@ -294,7 +293,8 @@ for(const id of [...ORDER,'f-memo']){
     e.preventDefault();
     if(e.isComposing||e.keyCode===229){            // 한글 조합 중 → 조합 끝난 뒤 이동
       moveAfterCompose=id;
-      setTimeout(()=>{ if(moveAfterCompose===id){ moveAfterCompose=null; advance(id); } },200);
+      el.blur();                                     // 남은 조합 글자를 지금 칸에 바로 확정
+      setTimeout(()=>{ if(moveAfterCompose===id){ moveAfterCompose=null; advance(id); } },120);
       return;
     }
     if(e.repeat)return;
@@ -328,7 +328,7 @@ function save(){
   const data={no,name,amount:amt,tickets,memo:$('f-memo').value.trim(),at:prev&&prev.at?prev.at:Date.now()};
   queue(id,'set',data);
   toast('toast',`${editId?'수정함':'저장함'} · ${no}번 ${name||'(이름 없음)'} ${won(amt)} · 식권 ${tickets}장`);
-  resetForm(); setTimeout(()=>focusField('f-name'),30);
+  resetForm(); focusField('f-name');
 }
 $('b-cancel').onclick=()=>{resetForm();};
 $('b-del').onclick=()=>{
