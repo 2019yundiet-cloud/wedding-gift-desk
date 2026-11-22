@@ -293,7 +293,7 @@ for(const id of [...ORDER,'f-memo']){
     if(e.key!=='Enter'&&e.keyCode!==13)return;
     e.preventDefault();
     if(e.isComposing||composing){ moveAfterCompose=id; return; }  // 조합 끝나면 이동
-    if(Date.now()-lastMove<250)return;
+    if(e.repeat)return;
     advance(id);
   });
 }
